@@ -77,7 +77,7 @@ where
         }
 
         let query = format!(
-            "i.id IN (SELECT item_id FROM items_tags WHERE name = ${} AND value {} ${}{} AND plaintext = {})",
+            "items_tags as result ON result.item_id = i.id AND result.name = ${} AND result.value = {} ${}{} AND result.plaintext = {}",
             idx + 1,
             op.as_sql_str(),
             idx + 2,
@@ -86,6 +86,9 @@ where
         );
         Ok(Some(query))
     }
+
+    // Ok(        "(i.id in (SELECT item_id FROM tags_plaintext WHERE name = $$ AND value != $$))".to_string())
+    // Ok(format!("tags_plaintext as {0} ON {0}.item_id = i.id AND {0}.wallet_id = $$ AND {0}.name = $$ AND {0}.value != $$", alias))
 
     fn encode_in_clause(
         &mut self,
@@ -97,7 +100,7 @@ where
         let args_in = Itertools::intersperse(std::iter::repeat("$$").take(enc_values.len()), ", ")
             .collect::<String>();
         let query = format!(
-            "i.id IN (SELECT item_id FROM items_tags WHERE name = $$ AND value {} ({}) AND plaintext = {})",
+            "items_tags as result ON result.item_id = i.id AND result.name = $$ AND result.value = {} ({}) AND result.plaintext = {}",
             if negate { "NOT IN" } else { "IN" },
             args_in,
             if is_plaintext { 1 } else { 0 }
@@ -185,7 +188,7 @@ mod tests {
             |value: &str| Ok(value.to_uppercase().into_bytes()),
         );
         let query_str = enc.encode_query(&query).unwrap().unwrap();
-        assert_eq!(query_str, "((i.id IN (SELECT item_id FROM items_tags WHERE name = $1 AND value = $2 AND SUBSTR(value, 1, 12) = $3 AND plaintext = 0) AND i.id IN (SELECT item_id FROM items_tags WHERE name = $4 AND value = $5 AND plaintext = 1)) OR (i.id IN (SELECT item_id FROM items_tags WHERE name = $6 AND value = $7 AND SUBSTR(value, 1, 12) = $8 AND plaintext = 0) AND i.id IN (SELECT item_id FROM items_tags WHERE name = $9 AND value != $10 AND plaintext = 1)))");
+        assert_eq!(query_str, "((items_tags as result ON result.item_id = i.id AND result.name = $1 AND result.value = = $2 AND SUBSTR(value, 1, 12) = $3 AND result.plaintext = 0 AND items_tags as result ON result.item_id = i.id AND result.name = $4 AND result.value = = $5 AND result.plaintext = 1) OR (items_tags as result ON result.item_id = i.id AND result.name = $6 AND result.value = = $7 AND SUBSTR(value, 1, 12) = $8 AND result.plaintext = 0 AND items_tags as result ON result.item_id = i.id AND result.name = $9 AND result.value = != $10 AND result.plaintext = 1))");
         let args = enc.arguments;
         assert_eq!(
             args,
